@@ -7,6 +7,8 @@ const gio = @import("gio");
 const glib = @import("glib");
 const gobject = @import("gobject");
 const gtk = @import("gtk");
+const gdk_wayland = @import("gdk_wayland");
+const gdk_x11 = @import("gdk_x11");
 
 const apprt = @import("../../../apprt.zig");
 const build_config = @import("../../../build_config.zig");
@@ -1787,6 +1789,25 @@ pub const Surface = extern struct {
         // same, this notification may replace a previous notification
         const gio_app = app.as(gio.Application);
         gio_app.sendNotification(body, notification);
+    }
+
+    pub fn renderDeviceOptions(self: *Self) !renderer.Device.Options {
+        switch (build_config.renderer) {
+            .opengl => {
+                const gtk_native = self.as(gtk.Widget).getNative() orelse return .{};
+                const gdk_surface = gtk_native.getSurface() orelse return .{};
+                const gdk_display = gdk_surface.getDisplay();
+
+                if (gobject.ext.cast(gdk_wayland.WaylandDisplay, gdk_display)) |wl| {
+                    return .{ .display = @ptrCast(wl.getEglDisplay()) };
+                }
+                if (gobject.ext.cast(gdk_x11.X11Display, gdk_display)) |x| {
+                    return .{ .display = @ptrCast(x.getEglDisplay()) };
+                }
+                return .{};
+            },
+            .metal => comptime unreachable,
+        }
     }
 
     //---------------------------------------------------------------
